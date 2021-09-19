@@ -1,0 +1,95 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hello-world
+spec:
+  selector:
+    matchLabels:
+      app: hello-world
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: hello-world
+    spec:
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 3000
+      #   fsGroup: 2000
+      #   runAsNonRoot: true
+      volumes:
+      - name: sec-ctx-vol
+        persistentVolumeClaim:
+          claimName: pv-claim
+      
+      initContainers:
+      - name: permissions
+        image: busybox
+
+        volumeMounts:
+        - name: sec-ctx-vol
+          mountPath: /data/demo
+
+        securityContext:
+          runAsUser: 0
+
+        command: ["/bin/sh","-c","chown -R 1000:3000 /data/demo"]
+        #command: ["/bin/sh", "-c", "echo Hello > /data/demo/testfile"]
+        #command: ["/bin/sh", "-c", "chmod -R g+rwX /data/demo"]
+        #command: ["/bin/sh", "-c", "id >> /data/demo/init.txt"]
+
+      containers:
+      - name: hello-world
+        image: sushranthhebbar/hello-world:latest
+        
+        # securityContext:
+        #   runAsUser: 1000
+        #   runAsGroup: 3000
+          
+        volumeMounts:
+        - name: sec-ctx-vol
+          mountPath: /data/demo
+
+        # securityContext:
+        #   capabilities:
+        #     add: ["CAP_FOWNER"]
+
+        lifecycle:
+         postStart:
+           exec:
+             command: ["/bin/sh", "-c", "echo Hello > /data/demo/testfile"]
+              
+        
+        #command: ["ls"]
+        
+        #args: 
+        #- /bin/sh
+        #- -c
+        #-  echo Hi > /data/demo/testfile   
+        #- ls 
+    
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8080
+            httpHeaders:
+            - name: Custom-Header
+              value: Awesome
+          periodSeconds: 5
+
+        readinessProbe:
+          exec:
+            command:
+            - cat
+            - /data/demo/testfile
+          periodSeconds: 5 
+
+        startupProbe:
+          httpGet:
+            path: /healthz
+            port: 8080
+          failureThreshold: 5
+          periodSeconds: 10
+
+        ports:
+        - containerPort: 8080
